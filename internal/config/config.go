@@ -26,9 +26,9 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("API_ID inválido no .env: %w", err)
 	}
 
-	ChatID, err := strconv.ParseInt(os.Getenv("ORIGIN_CHAT_ID"), 10, 64)
+	ChatID, err := strconv.ParseInt(os.Getenv("CHAT_ID"), 10, 64)
 	if err != nil {
-		return nil, fmt.Errorf("ORIGIN_CHAT_ID inválido: %w", err)
+		return nil, fmt.Errorf("CHAT_ID inválido: %w", err)
 	}
 
 	cfg := &Config{

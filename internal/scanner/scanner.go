@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	domain "github.com/FolcloreX/GopherGram/internal/domains"
+	"github.com/FolcloreX/GopherGram/internal/domain"
 )
 
 type Scanner struct {

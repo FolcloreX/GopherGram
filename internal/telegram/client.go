@@ -27,6 +27,8 @@ type Client struct {
 	appID    int
 	appHash  string
 	chatID   int64
+
+	TargetPeer tg.InputPeerClass
 }
 
 func NewClient(cfg *config.Config) *Client {
