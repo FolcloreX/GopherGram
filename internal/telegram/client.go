@@ -40,11 +40,13 @@ type Client struct {
 
 func NewClient(cfg *config.Config) *Client {
 	return &Client{
-		phone:    cfg.Phone,
-		password: cfg.Password,
-		appID:    cfg.APIID,
-		appHash:  cfg.APIHash,
-		chatID:   cfg.ChatID,
+		phone:       cfg.Phone,
+		password:    cfg.Password,
+		appID:       cfg.APIID,
+		appHash:     cfg.APIHash,
+		chatID:      cfg.ChatID,
+		postGroupID: cfg.PostGroupID,
+		postTopicID: cfg.PostGroupTopicID,
 	}
 }
 
@@ -75,7 +77,9 @@ func (c *Client) Start(ctx context.Context, runLogic func(ctx context.Context) e
 
 		raw := c.client.API()
 		c.sender = message.NewSender(raw)
-		c.uploader = uploader.NewUploader(raw)
+		c.uploader = uploader.NewUploader(raw).
+			WithPartSize(1024 * 1024). // 1MB per chunk
+			WithThreads(8)
 
 		fmt.Println("✅ Userbot conectado e autenticado!")
 

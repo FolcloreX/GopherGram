@@ -247,6 +247,7 @@ func (c *Client) SendAnnouncement(
 
 	var sendErr error
 
+	// Check wheter or not a topic was specifiec
 	if c.postTopicID > 0 {
 		fmt.Printf("   ↳ No Tópico ID: %d\n", c.postTopicID)
 
