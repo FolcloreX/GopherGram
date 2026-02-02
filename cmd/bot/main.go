@@ -17,30 +17,37 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("\n❌ ERRO: Você precisa informar a pasta do curso!")
-		fmt.Println("---------------------------------------------------------")
-		fmt.Println("✅ Uso Correto:")
-		fmt.Println("   go run cmd/bot/main.go \"/caminho/completo/do/curso\"")
-		fmt.Println("---------------------------------------------------------")
+		fmt.Println("\n❌ ERRO: Informe a pasta do curso!")
+		fmt.Println("✅ Uso: go run cmd/bot/main.go \"/path/curso\" \"/path/capa.jpg\"(opcional)")
 		os.Exit(1)
 	}
 
+	// Argument 1: Content Directory Absolute Path
 	rawPath := os.Args[1]
 	rootDir, err := filepath.Abs(rawPath)
 	if err != nil {
-		log.Fatalf("Erro ao ler caminho: %v", err)
+		log.Fatalf("Erro path: %v", err)
 	}
 
 	info, err := os.Stat(rootDir)
-	if os.IsNotExist(err) {
-		log.Fatalf("❌ A pasta informada não existe:\n%s", rootDir)
-	}
-	if !info.IsDir() {
-		log.Fatalf("❌ O caminho informado é um arquivo, não uma pasta:\n%s", rootDir)
+	if os.IsNotExist(err) || !info.IsDir() {
+		log.Fatalf("Pasta inválida: %s", rootDir)
 	}
 
-	fmt.Printf("\n🚀 INICIANDO GOPHERGRAM UPLOADER\n")
-	fmt.Printf("📂 Alvo: %s\n\n", rootDir)
+	// Argument 2: Cover Absolute Path (Opcional)
+	coverPath := ""
+	if len(os.Args) >= 3 {
+		coverPath = os.Args[2]
+		if _, err := os.Stat(coverPath); os.IsNotExist(err) {
+			log.Printf("⚠️ Aviso: Capa informada não existe: %s (será enviado como texto)", coverPath)
+			coverPath = ""
+		}
+	}
+
+	// Content name = Name of the Root Folder
+	courseName := filepath.Base(rootDir)
+
+	fmt.Printf("\n🚀 GOPHERGRAM UPLOADER\n📂 Curso: %s\n🖼 Capa: %s\n\n", courseName, coverPath)
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -50,9 +57,20 @@ func main() {
 	bot := telegram.NewClient(cfg)
 
 	err = bot.Start(context.Background(), func(ctx context.Context) error {
+		// Check if a group was passed otherwise create a new one
+		if cfg.ChatID != 0 {
+			if err := bot.CheckChatAccess(ctx); err != nil {
+				return fmt.Errorf("erro ao acessar chat origem: %w", err)
+			}
+		} else {
+			if err := bot.CreateOriginChannel(ctx, courseName); err != nil {
+				return fmt.Errorf("erro ao criar canal: %w", err)
+			}
+		}
 
-		if err := bot.CheckChatAccess(ctx); err != nil {
-			return err
+		// Resolve the PostGroup, if no one is passed we send to the saved messages
+		if err := bot.ResolvePostTarget(ctx); err != nil {
+			return fmt.Errorf("erro ao resolver grupo de divulgação: %w", err)
 		}
 
 		fmt.Println("🔍 Escaneando arquivos...")
@@ -61,6 +79,13 @@ func main() {
 		if err != nil {
 			return fmt.Errorf("erro no scanner: %w", err)
 		}
+
+		// Metadada to perform information in the invite and the description
+		var totalSizeBytes int64
+		var totalDurationSeconds int
+
+		totalSizeBytes = processor.CalculateAssetsSize(course.Assets)
+		totalSizeBytes += processor.CalculateVideosSize(course.Modules)
 
 		totalVideos := 0
 		for _, m := range course.Modules {
@@ -114,7 +139,7 @@ func main() {
 			indexBuilder.WriteString("\n\n")
 
 			os.Remove(zipName)
-		
+
 		} else {
 			indexBuilder.WriteString("<i>Nenhum material de apoio.</i>\n\n")
 		}
@@ -147,6 +172,9 @@ func main() {
 							meta = &processor.VideoMeta{}
 						}
 
+						// Sum the total duration to show
+						totalDurationSeconds += meta.Duration
+
 						caption := video.FormatCaption()
 						if len(parts) > 1 {
 							caption += fmt.Sprintf(" [Parte %d/%d]", i+1, len(parts))
@@ -170,9 +198,10 @@ func main() {
 			}
 
 			fmt.Println("\n------------------------------------------------")
-			fmt.Println("📑 [FASE 3] Enviando Menu Final")
+			fmt.Println("📑 [FASE 3] Finalização")
 			fmt.Println("------------------------------------------------")
 
+			fmt.Print("📨 Enviando Menu de Links... ")
 			msgID, err := bot.SendMessage(ctx, indexBuilder.String())
 			if err != nil {
 				log.Printf("Erro ao enviar Index: %v", err)
@@ -185,12 +214,50 @@ func main() {
 			}
 		}
 
-		fmt.Println("\n✅✅✅ PROCESSO CONCLUÍDO COM SUCESSO! ✅✅✅")
+		fmt.Println("\n------------------------------------------------")
+		fmt.Println("📢 [FASE 4] Divulgação")
+		fmt.Println("------------------------------------------------")
+
+		inviteLink, err := bot.GenerateInviteLink(ctx)
+		if err != nil {
+			log.Printf("⚠️ Erro link convite: %v", err)
+			inviteLink = ""
+		} else {
+			fmt.Printf("🔗 Link do Curso: %s\n", inviteLink)
+		}
+
+		// Update the channel description
+		channelBio := processor.FormatChannelBio(
+			totalSizeBytes,
+			totalDurationSeconds,
+			inviteLink,
+			cfg.Logo,
+		)
+
+		fmt.Println("\n🎨 Personalizando Canal...")
+		if err := bot.UpdateChannelInfo(ctx, coverPath, channelBio); err != nil {
+			log.Printf("⚠️ Erro ao atualizar perfil: %v", err)
+		}
+
+		// Create the invite message
+		cardCaption := processor.FormatCourseCard(
+			courseName,
+			totalSizeBytes,
+			totalDurationSeconds,
+			cfg.Logo,
+			inviteLink,
+		)
+
+		if err := bot.SendAnnouncement(ctx, coverPath, cardCaption); err != nil {
+			log.Printf("❌ Erro ao postar anúncio: %v", err)
+		}
+
+		fmt.Println("\n✅✅✅ PROCESSO CONCLUÍDO! ✅✅✅")
 		return nil
 	})
 
 	if err != nil {
-		fmt.Printf("\n❌ FALHA CRÍTICA: %v\n", err)
+		fmt.Printf("\n❌ FALHA: %v\n", err)
 		os.Exit(1)
 	}
 }

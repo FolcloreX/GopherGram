@@ -22,13 +22,20 @@ type Client struct {
 	sender   *message.Sender
 	uploader *uploader.Uploader
 
+	// Account info
 	phone    string
 	password string
 	appID    int
 	appHash  string
-	chatID   int64
 
+	// Group that will be uploaded
+	chatID     int64
 	TargetPeer tg.InputPeerClass
+
+	// Group that we gonna share
+	postGroupID    int64
+	postTopicID    int
+	PostTargetPeer tg.InputPeerClass
 }
 
 func NewClient(cfg *config.Config) *Client {
