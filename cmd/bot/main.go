@@ -12,6 +12,7 @@ import (
 	"github.com/FolcloreX/GopherGram/internal/domain"
 	"github.com/FolcloreX/GopherGram/internal/processor"
 	"github.com/FolcloreX/GopherGram/internal/scanner"
+	"github.com/FolcloreX/GopherGram/internal/state"
 	"github.com/FolcloreX/GopherGram/internal/telegram"
 )
 
@@ -52,6 +53,15 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("Erro no .env: %v", err)
+	}
+
+	stateFile := filepath.Join("session", "upload_progress.json")
+	_ = os.MkdirAll("session", 0700)
+
+	prog, err := state.Load(stateFile)
+	if err != nil {
+		log.Printf("⚠️ Erro ao carregar estado: %v (iniciando do zero)", err)
+		prog, _ = state.Load(stateFile) // Fallback
 	}
 
 	bot := telegram.NewClient(cfg)
@@ -124,6 +134,14 @@ func main() {
 			}
 
 			for i, part := range parts {
+
+				// Check if the part is not already uploaded
+				if prog.IsDone(part) {
+					fmt.Printf("⏩ Pulando (já enviado): %s\n", filepath.Base(part))
+					os.Remove(part) // Remove because we already sent
+					continue
+				}
+
 				// Generates the tag (Ex: #Doc001, #Doc002...)
 				currentDocTag := fmt.Sprintf("#%s%03d", domain.HashTagDoc, i+1)
 				indexBuilder.WriteString(currentDocTag + " ")
@@ -134,6 +152,9 @@ func main() {
 				if err := bot.UploadAndSendDocument(ctx, part, caption); err != nil {
 					return err
 				}
+
+				// If uploaded sucessfully we mark as done in the state
+				prog.MarkAsDone(part)
 				os.Remove(part)
 			}
 			indexBuilder.WriteString("\n\n")
@@ -167,13 +188,25 @@ func main() {
 						// Extracting metada
 						fmt.Printf("   📸 Gerando metadados para %s...\n", filepath.Base(partPath))
 						meta, err := processor.ExtractMetadata(partPath)
+
+						// TODO improve the logic! Code repetition
+						// Sum the total duration to show
+						// We keep it before check if it's uploaded or not to keep the metadada correct
+						totalDurationSeconds += meta.Duration
+
+						if prog.IsDone(partPath) {
+							fmt.Printf("⏩ Pulando (já enviado): %s\n", filepath.Base(partPath))
+
+							if partPath != video.FilePath {
+								os.Remove(partPath)
+							}
+							continue
+						}
+
 						if err != nil {
 							log.Printf("   ⚠️ Falha ao gerar thumbnail (enviando sem): %v", err)
 							meta = &processor.VideoMeta{}
 						}
-
-						// Sum the total duration to show
-						totalDurationSeconds += meta.Duration
 
 						caption := video.FormatCaption()
 						if len(parts) > 1 {
@@ -184,9 +217,15 @@ func main() {
 							return err
 						}
 
+						// Mark the file as correctly uploaded in the state
+						prog.MarkAsDone(partPath)
+
+						// Cleaning the generated chunks of file. ALWAYS keeping the original
 						if partPath != video.FilePath {
 							os.Remove(partPath)
 						}
+
+						// Clear the generate thumb
 						if meta.ThumbPath != "" {
 							os.Remove(meta.ThumbPath)
 						}
