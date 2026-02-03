@@ -3,8 +3,10 @@ package telegram
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/FolcloreX/GopherGram/internal/processor"
 
@@ -12,6 +14,7 @@ import (
 	"github.com/gotd/td/telegram/message/html"
 	"github.com/gotd/td/telegram/uploader"
 	"github.com/gotd/td/tg"
+	"github.com/gotd/td/tgerr"
 	"github.com/schollz/progressbar/v3"
 )
 
@@ -19,36 +22,105 @@ type progressWrapper struct {
 	bar *progressbar.ProgressBar
 }
 
+type Upload struct {
+	File io.Reader
+	Size int64
+	Name string
+}
+
 func (p *progressWrapper) Chunk(ctx context.Context, state uploader.ProgressState) error {
 	_ = p.bar.Set64(state.Uploaded)
 	return nil
 }
 
-func (c *Client) UploadAndSendVideo(ctx context.Context, filePath string, caption string, meta *processor.VideoMeta) error {
+func (c *Client) uploadWithRetry(
+	ctx context.Context,
+	filePath string,
+	label string,
+	timeout time.Duration,
+) (tg.InputFileClass, error) {
 	fileName := filepath.Base(filePath)
 
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("erro ler arquivo: %w", err)
+	}
+
+	const maxRetries = 3
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		fmt.Printf("\n%s %s (tentativa %d/%d)\n", label, fileName, attempt, maxRetries)
+
+		uploadCtx, cancel := context.WithTimeout(ctx, timeout)
+
+		bar := progressbar.DefaultBytes(info.Size(), label)
+		u := c.uploader.WithProgress(&progressWrapper{bar: bar})
+
+		file, err := os.Open(filePath)
+		if err != nil {
+			cancel()
+			return nil, fmt.Errorf("erro abrir arquivo: %w", err)
+		}
+
+		upload := uploader.NewUpload(fileName, file, info.Size())
+		inputFile, err := u.Upload(uploadCtx, upload)
+
+		file.Close()
+		cancel()
+		_ = bar.Finish()
+		fmt.Println()
+
+		if err != nil {
+			handled, ferr := tgerr.FloodWait(ctx, err)
+			if handled {
+				fmt.Println("⏳ FloodWait tratado, retry automático...")
+				continue
+			}
+			if ferr != nil {
+				return nil, ferr
+			}
+
+			fmt.Printf("⚠️ Erro upload: %v\n", err)
+
+			if attempt < maxRetries {
+				time.Sleep(3 * time.Second)
+				continue
+			}
+
+			return nil, fmt.Errorf("falha upload após %d tentativas: %w", maxRetries, err)
+		}
+
+		return inputFile, nil
+	}
+
+	return nil, fmt.Errorf("falha geral no upload")
+}
+
+func (c *Client) UploadAndSendVideo(
+	ctx context.Context,
+	filePath string,
+	caption string,
+	meta *processor.VideoMeta,
+) error {
 	if c.TargetPeer == nil {
 		return fmt.Errorf("TargetPeer nulo (rode CheckChatAccess)")
 	}
 
-	info, err := os.Stat(filePath)
+	fileName := filepath.Base(filePath)
+
+	fmt.Printf("\n🎬 Enviando vídeo: %s [%dx%d]\n", fileName, meta.Width, meta.Height)
+
+	videoUpload, err := c.uploadWithRetry(
+		ctx,
+		filePath,
+		"⬆️  Video",
+		30*time.Minute,
+	)
 	if err != nil {
-		return fmt.Errorf("erro ler arquivo: %w", err)
+		return err
 	}
 
-	fmt.Printf("\n🎬 Enviando: %s [%dx%d]\n", fileName, meta.Width, meta.Height)
-
-	bar := progressbar.DefaultBytes(info.Size(), "⬆️  Video")
-	u := c.uploader.WithProgress(&progressWrapper{bar: bar})
-
-	videoUpload, err := u.FromPath(ctx, filePath)
-	if err != nil {
-		return fmt.Errorf("falha upload video: %w", err)
-	}
-
-	_ = bar.Finish()
-	fmt.Println()
-
+	// Thumbnail (best-effort)
 	var thumbUpload tg.InputFileClass
 	if meta.ThumbPath != "" {
 		fmt.Print("🖼 Enviando thumbnail... ")
@@ -81,46 +153,48 @@ func (c *Client) UploadAndSendVideo(ctx context.Context, filePath string, captio
 		inputMedia.Thumb = thumbUpload
 	}
 
-	fmt.Print("📨 Enviando mensagem da mídia... ")
+	fmt.Print("📨 Enviando mensagem do vídeo... ")
 
 	_, err = c.sender.
 		To(c.TargetPeer).
-		Media(
-			ctx,
-			message.Media(inputMedia, html.String(nil, caption)),
-		)
+		Media(ctx, message.Media(inputMedia, html.String(nil, caption)))
 
 	if err != nil {
-		return fmt.Errorf("erro envio: %w", err)
+		handled, ferr := tgerr.FloodWait(ctx, err)
+		if handled {
+			fmt.Println("⏳ FloodWait no envio tratado, reenviando...")
+			return c.UploadAndSendVideo(ctx, filePath, caption, meta)
+		}
+		if ferr != nil {
+			return ferr
+		}
+		return fmt.Errorf("erro envio vídeo: %w", err)
 	}
 
+	fmt.Println("✅ Vídeo enviado com sucesso")
 	return nil
 }
 
-func (c *Client) UploadAndSendDocument(ctx context.Context, filePath string, caption string) error {
-	fileName := filepath.Base(filePath)
-
+func (c *Client) UploadAndSendDocument(
+	ctx context.Context,
+	filePath string,
+	caption string,
+) error {
 	if c.TargetPeer == nil {
 		return fmt.Errorf("TargetPeer nulo")
 	}
 
-	info, err := os.Stat(filePath)
+	fileName := filepath.Base(filePath)
+
+	fileUpload, err := c.uploadWithRetry(
+		ctx,
+		filePath,
+		"⬆️  Doc  ",
+		45*time.Minute,
+	)
 	if err != nil {
-		return fmt.Errorf("erro ler arquivo: %w", err)
+		return err
 	}
-
-	fmt.Printf("\n🗂 Enviando: %s\n", fileName)
-
-	bar := progressbar.DefaultBytes(info.Size(), "⬆️  Doc  ")
-	u := c.uploader.WithProgress(&progressWrapper{bar: bar})
-
-	fileUpload, err := u.FromPath(ctx, filePath)
-	if err != nil {
-		return fmt.Errorf("falha upload doc: %w", err)
-	}
-
-	_ = bar.Finish()
-	fmt.Println()
 
 	attrs := []tg.DocumentAttributeClass{
 		&tg.DocumentAttributeFilename{FileName: fileName},
@@ -128,24 +202,30 @@ func (c *Client) UploadAndSendDocument(ctx context.Context, filePath string, cap
 
 	inputMedia := &tg.InputMediaUploadedDocument{
 		File:       fileUpload,
-		MimeType:   "application/zip", // Or application/octet-stream
+		MimeType:   "application/zip",
 		Attributes: attrs,
 		ForceFile:  true,
 	}
 
-	fmt.Print("📨 Enviando Mensagem dos Materiais Zipados... ")
+	fmt.Print("📨 Enviando mensagem do documento... ")
 
 	_, err = c.sender.
 		To(c.TargetPeer).
-		Media(
-			ctx,
-			message.Media(inputMedia, html.String(nil, caption)),
-		)
+		Media(ctx, message.Media(inputMedia, html.String(nil, caption)))
 
 	if err != nil {
-		return fmt.Errorf("erro envio: %w", err)
+		handled, ferr := tgerr.FloodWait(ctx, err)
+		if handled {
+			fmt.Println("⏳ FloodWait no envio tratado, reenviando...")
+			return c.UploadAndSendDocument(ctx, filePath, caption)
+		}
+		if ferr != nil {
+			return ferr
+		}
+		return fmt.Errorf("erro envio doc: %w", err)
 	}
 
+	fmt.Println("✅ Documento enviado com sucesso")
 	return nil
 }
 
@@ -300,7 +380,6 @@ func (c *Client) GenerateInviteLink(ctx context.Context) (string, error) {
 	}
 	return "", fmt.Errorf("link desconhecido")
 }
-
 
 func (c *Client) resolvePeerByID(ctx context.Context, targetID int64) (tg.InputPeerClass, error) {
 	fmt.Printf("   ↳ Consultando ID %d na API...\n", targetID)
@@ -485,7 +564,7 @@ func (c *Client) CreateOriginChannel(ctx context.Context, title string) error {
 	}
 
 	// Update the config
-	c.chatID = newChannel.ID 
+	c.chatID = newChannel.ID
 	c.TargetPeer = &tg.InputPeerChannel{
 		ChannelID:  newChannel.ID,
 		AccessHash: newChannel.AccessHash,

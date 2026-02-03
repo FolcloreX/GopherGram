@@ -51,24 +51,24 @@ func NewClient(cfg *config.Config) *Client {
 }
 
 func (c *Client) Start(ctx context.Context, runLogic func(ctx context.Context) error) error {
-	// Configure persistent session (session.json)
+	// Sessão persistente
 	sessionDir := "session"
-	if err := os.MkdirAll(sessionDir, 0700); err != nil {
-		return err
-	}
+	_ = os.MkdirAll(sessionDir, 0700)
+
 	sessionStorage := &session.FileStorage{
 		Path: filepath.Join(sessionDir, "session.json"),
 	}
 
-	// Waits the time specified in the FloodAwait
 	waiter := floodwait.NewSimpleWaiter()
 
-	c.client = telegram.NewClient(c.appID, c.appHash, telegram.Options{
-		SessionStorage: sessionStorage,
-		Middlewares: []telegram.Middleware{
-			waiter,
+	c.client = telegram.NewClient(
+		c.appID,
+		c.appHash,
+		telegram.Options{
+			SessionStorage: sessionStorage,
+			Middlewares:    []telegram.Middleware{waiter},
 		},
-	})
+	)
 
 	return c.client.Run(ctx, func(ctx context.Context) error {
 		if err := c.authenticate(ctx); err != nil {
@@ -77,12 +77,10 @@ func (c *Client) Start(ctx context.Context, runLogic func(ctx context.Context) e
 
 		raw := c.client.API()
 		c.sender = message.NewSender(raw)
-		c.uploader = uploader.NewUploader(raw).
-			WithPartSize(1024 * 1024). // 1MB per chunk
-			WithThreads(8)
 
-		fmt.Println("✅ Userbot conectado e autenticado!")
+		c.uploader = uploader.NewUploader(raw).WithThreads(6)
 
+		fmt.Println("🤖 Userbot conectado e pronto!")
 		return runLogic(ctx)
 	})
 }
