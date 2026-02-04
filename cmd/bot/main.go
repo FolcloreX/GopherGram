@@ -45,26 +45,27 @@ func main() {
 		}
 	}
 
-	// Content name = Name of the Root Folder
-	courseName := filepath.Base(rootDir)
+	// ContentName = Name of the Root Folder
+	contentName := filepath.Base(rootDir)
 
-	fmt.Printf("\n🚀 GOPHERGRAM UPLOADER\n📂 Curso: %s\n🖼 Capa: %s\n\n", courseName, coverPath)
+	fmt.Printf("\n🚀 GOPHERGRAM UPLOADER\n📂 Curso: %s\n🖼 Capa: %s\n\n", contentName, coverPath)
 
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("Erro no .env: %v", err)
 	}
 
-	stateFile := filepath.Join("session", "upload_progress.json")
-	_ = os.MkdirAll("session", 0700)
-
-	prog, err := state.Load(stateFile)
-	if err != nil {
-		log.Printf("⚠️ Erro ao carregar estado: %v (iniciando do zero)", err)
-		prog, _ = state.Load(stateFile) // Fallback
-	}
-
 	bot := telegram.NewClient(cfg)
+
+	prog, err := state.LoadProgressContent(contentName)
+
+	if err != nil {
+		log.Printf("⚠️  Erro state: %v", err)
+		// Fallback se der erro crítico de IO
+		prog, _ = state.Load("session/progress_fallback.json")
+	} else {
+		fmt.Printf("💾 Estado carregado: %s\n", prog.FilePath)
+	}
 
 	err = bot.Start(context.Background(), func(ctx context.Context) error {
 		// Check if a group was passed otherwise create a new one
@@ -73,7 +74,7 @@ func main() {
 				return fmt.Errorf("erro ao acessar chat origem: %w", err)
 			}
 		} else {
-			if err := bot.CreateOriginChannel(ctx, courseName); err != nil {
+			if err := bot.CreateOriginChannel(ctx, contentName); err != nil {
 				return fmt.Errorf("erro ao criar canal: %w", err)
 			}
 		}
@@ -280,7 +281,7 @@ func main() {
 
 		// Create the invite message
 		cardCaption := processor.FormatCourseCard(
-			courseName,
+			contentName,
 			totalSizeBytes,
 			totalDurationSeconds,
 			cfg.Logo,
