@@ -79,6 +79,15 @@ func main() {
 			}
 		}
 
+		newID := bot.GetTargetChatID()
+
+		// Save in the state file the CHAT_ID
+		if err := prog.SetChatID(newID); err != nil {
+			log.Printf("⚠️ CRÍTICO: Não foi possível salvar o ID no JSON: %v", err)
+		} else {
+			fmt.Printf("💾 ID %d salvo no arquivo de estado com sucesso!\n", newID)
+		}
+
 		// Resolve the PostGroup, if no one is passed we send to the saved messages
 		if err := bot.ResolvePostTarget(ctx); err != nil {
 			return fmt.Errorf("erro ao resolver grupo de divulgação: %w", err)

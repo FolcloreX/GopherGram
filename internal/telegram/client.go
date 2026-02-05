@@ -17,6 +17,11 @@ import (
 	"github.com/FolcloreX/GopherGram/internal/config"
 )
 
+// It's a getter only used to write the CHAT_ID in the state file
+func (c *Client) GetTargetChatID() int64 {
+	return c.chatID
+}
+
 type Client struct {
 	client   *telegram.Client
 	sender   *message.Sender
