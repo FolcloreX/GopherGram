@@ -43,8 +43,6 @@ func FormatCourseCard(courseName string, totalBytes int64, totalSeconds int, log
 			"⏳ | Duração Total: %dh %02dm\n"+
 			"🚀 | Lançamento: 2024\n\n"+
 			"%s\n\n"+
-			"📝 Descrição:\n"+
-			"<blockquote>Colocar a descrição aqui</blockquote>"+
 			"%s",
 		courseName,
 		gb,

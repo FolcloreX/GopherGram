@@ -1,92 +1,137 @@
-### Telegram Uploader Workflow & Logic
+# 🐹 GopherGram Uploader
 
-#### Constraints and Limits
-The system strictly adheres to Telegram's file size limitations to ensure accessibility for all users:
-*   **Standard Limit:** 2 GB
-*   **Premium Limit:** 4 GB
-*   **System Policy:** To ensure all users can download the content easily, **the system enforces a hard limit of 2 GB per file**, regardless of the uploader's Premium status.
+**GopherGram** é uma ferramenta de automação de alta performance escrita em **Go (Golang)**, projetada para fazer upload de cursos inteiros, séries ou grandes volumes de arquivos para o Telegram.
+
+Ele atua como um **Userbot** (cliente MTProto), permitindo uploads de até **2GB (ou 4GB para Premium)**, gerenciamento de canais e formatação automática de conteúdo.
 
 ---
 
-### 1. Preparation Phase
-#### 1.1. Handling Non-Video Files (Context Preservation & Archiving)
+## ✨ Funcionalidades Principais
 
-To keep the content organized, non-video assets (PDFs, source code, archives) are separated from the video stream. The system replicates the original directory structure inside a staging folder to ensure users understand which module or section the files belong to.
+- **🚀 Upload Resiliente:** Sistema de **Resume** automático. Se a internet cair ou o pc desligar, ele continua exatamente do arquivo onde parou (baseado no nome do curso).
+- **✂️ Split Inteligente:** Divide automaticamente vídeos e arquivos ZIP maiores que **2GB** (limite do Telegram) sem corromper o original.
+- **🎥 Streaming & Preview:** Gera thumbnails e metadados (duração/resolução) via **FFmpeg** para que os vídeos toquem nativamente no player do Telegram.
+- **🗂️ Organização Automática:**
+  - Compacta arquivos de apoio (PDFs, Códigos) em ZIPs.
+  - Envia vídeos na ordem correta dos módulos.
+  - Gera um **Índice Navegável** (Menu) com hashtags (#F001, #F002...).
+- **🤖 Automação de Infraestrutura:**
+  - Se nenhum Chat ID for informado, **cria um canal novo** automaticamente com o nome do curso.
+  - Atualiza a **Foto** e a **Descrição** do canal com estatísticas (Tamanho Total, Duração).
+  - Gera link de convite.
+- **📢 Divulgação:** Posta um Card final formatado em um Grupo/Tópico de "Feed" configurável.
+- **🔐 Multi-Conta:** Suporta múltiplas sessões baseadas no número de telefone.
 
-Once organized, this folder is **compressed into ZIP archives**. If the total size of the assets exceeds the limit, the archive is automatically split into multiple parts to strictly respect the **2 GB limit per file**.
+---
 
-- **Original Path:** `introduction-1/course-setup/setup-instructions.pdf`
-    
-- **Staging Path:** `files/introduction-1/course-setup/setup-instructions.pdf`
-    
-- **Final Output:** `files.zip (or files.part1.zip, files.part2.zip if over 2 GB).`
+## 🛠️ Pré-requisitos
 
-#### 1.2. Video Splitting
-Videos exceeding the **2 GB limit** are automatically split into multiple parts. The naming convention appends the part number to the original filename:
+Antes de rodar, certifique-se de ter instalado:
 
-*   **Original:** `golang-routines.mp4`
-*   **Split:** `golang-routines-part-1.mp4`, `golang-routines-part-2.mp4`, etc.
+1.  **Go 1.20+**: [Download Go](https://go.dev/dl/)
+2.  **FFmpeg**: Essencial para processar vídeos e gerar thumbnails.
+    - _Linux:_ `sudo apt install ffmpeg`
+    - _Windows:_ [Baixar executável](https://ffmpeg.org/download.html) e adicionar ao PATH.
+3.  **Credenciais do Telegram**: Obtenha seu `API_ID` e `API_HASH` em [my.telegram.org](https://my.telegram.org).
 
-#### 1.3 Create an `index.md`
+---
 
-This content is sent as the **final message** in the channel and is automatically **pinned**.
+## ⚙️ Configuração (.env)
 
-**Index Example:**
-```markdown 
-⚠️ **Attention** ⚠️
- 
-Click here to view the Menu. 
-Use the hashtags to jump directly to specific videos.
+Crie um arquivo `.env` na raiz do projeto:
 
-📂 **Files**
-#Doc001
+```env
+# --- Credenciais da Conta (Obrigatório) ---
+API_ID=123456
+API_HASH=sua_hash_aqui
+PHONE_NUMBER=+5511999999999
+PASSWORD=sua_senha_2fa_se_tiver
 
-🔹 **01 - Introduction**
-#F001 #F002 #F003 #F004
+# --- Configuração de Upload (Opcional) ---
+# Se deixar vazio ou 0, o bot CRIA um CANAL NOVO com o nome da pasta.
+# Se preencher, ele usa esse canal existente.
+ORIGIN_CHAT_ID=
 
-🔹 **02 - PyTorch Fundamentals**
-#F005 #F006 #F007 #F008 #F009 #F010 #F011 #F012 
+# --- Configuração de Divulgação (Opcional) ---
+# ID do Grupo onde o Card Final será postado.
+# Se vazio, envia para o seu "Saved Messages".
+POST_GROUP_ID=-100123456789
 
-🔹 **03 - PyTorch Workflow**
-#F037 #F038 #F039 #F040 #F041 #F042 #F043
+# Se o grupo acima tiver tópicos, coloque o ID do tópico aqui.
+POST_GROUP_TOPIC_ID=
+
+# --- Personalização ---
+# Assinatura que aparece no rodapé das mensagens
+LOGO="Postado por @GopherGram"
 ```
 
-#### 1.4. Metadata & Captions
-Every uploaded video includes a structured caption to facilitate search and navigation. The format includes:
-1.  **Navigation Hashtag:** A unique ID (e.g., `#D033`).
-2.  **Video Title:** Preceded by its sequence number.
-3.  **Module Name:** The parent category of the video.
+---
 
-**Caption Template:**
-```markdown
-#D033 8 - Creating the first commit
-Module 03 - Code versioning and hosting (Git and Github)
+## 🚀 Como Usar
+
+O comando básico exige o caminho da pasta do curso.
+
+### 1. Upload Simples (Capa Texto)
+
+**Linux / macOS**
+
+```bash
+go run cmd/bot/main.go "/Caminho/Para/A/Midia"
+go run cmd/bot/main.go "/caminho/para/midia" "/caminho/para/capa.jpg"
+
 ```
 
-#### 1.5. Upload Queue
-The system generates an upload queue based on the file system hierarchy. It processes folders and files in **alphanumeric ascending order**.
+**Windows**
 
-**Recommended Directory Structure:**
-For the best results, ensure your source folders are numbered:
+```bash
+go run cmd\bot\main.go "C:\Caminho\Para\Midia"
+```
+
+### 2. Upload com Capa (Imagem)
+
+Passe o caminho da imagem como segundo argumento. Ela será usada como foto do canal e no card de divulgação.
+
+**Linux / macOS**
+
+```bash
+go run cmd/bot/main.go "/Caminho/Para/A/Midia" "/Caminho/Para/Capa.jpg"
+```
+
+**Windows**
+
+```bash
+go run cmd\bot\main.go "C:\Caminho\Para\Midia" "C:\Caminho\Para\Capa.jpg"
+```
+
+---
+
+## 📂 Estrutura de Pastas Recomendada
+
+Para garantir que a ordem dos vídeos fique correta (1, 2, 3...), numere suas pastas e arquivos:
+
 ```text
-├── 1. Introduction
-│   ├── 1. Welcome and Support
-│   │   ├── 1. first-class.mp4
-│   │   └── description.html
-│   └── 2. The initial setup
-│       └── 1. how-to-setup.mp4
+/Meu Curso de Golang
+├── 01. Introdução
+│   ├── 01. Instalação.mp4
+│   ├── 02. Hello World.mp4
+│   └── apostila.pdf  <-- Será zipado automaticamente
+├── 02. Sintaxe Básica
+│   ├── 01. Variáveis.mp4
+│   └── 02. Funções.mp4
+└── capa.jpg
 ```
 
 ---
 
-### 2. Execution Phase
+## 🧠 Como funciona o Estado (Resume)
 
-#### 2.1. Upload Sequence
-To ensure the user experience is logical, the upload order is strictly defined:
-1.  **Assets:** Upload all non-video files (replicated structure).
-2.  **Videos:** Upload all video files (in queue order).
-3.  **Index:** Generate and send the navigation menu.
+O bot cria uma pasta `session/` na raiz.
 
-#### 2.2. Finalize
-- Send the `index.md` content (which was created in step 1.3) as the final message.    
-- Pin the message.
+- **`session_+55...json`**: Guarda sua sessão de login (para não pedir código toda vez).
+- **`progress_Nome_Do_Curso.json`**: Guarda quais arquivos já foram enviados e qual o ID do canal criado.
+
+**Para reiniciar um upload do zero:** Basta apagar o arquivo `.json` referente àquele curso dentro da pasta `session/`.
+
+## 📝 Licença
+
+Este projeto está sob a licença MIT. Sinta-se livre para contribuir! 🤝

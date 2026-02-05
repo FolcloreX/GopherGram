@@ -79,7 +79,7 @@ func (c *Client) CreateOriginChannel(ctx context.Context, title string) error {
 	updates, err := c.client.API().ChannelsCreateChannel(ctx, &tg.ChannelsCreateChannelRequest{
 		Broadcast: true, // True = Channel, False = Grup
 		Title:     title,
-		About:     "Curso postado via GopherGram",
+		About:     "Material está em fase de upload via GopherGram",
 	})
 
 	if err != nil {
