@@ -60,9 +60,12 @@ func (c *Client) Start(ctx context.Context, runLogic func(ctx context.Context) e
 	sessionDir := "session"
 	_ = os.MkdirAll(sessionDir, 0700)
 
-	sessionStorage := &session.FileStorage{
-		Path: filepath.Join(sessionDir, "session.json"),
-	}
+	sessionFileName := fmt.Sprintf("session_%s.json", c.phone)
+	sessionPath := filepath.Join(sessionDir, sessionFileName)
+
+	fmt.Printf("🔐 Arquivo de Sessão: %s\n", sessionPath)
+
+	sessionStorage := &session.FileStorage{Path: sessionPath}
 
 	waiter := floodwait.NewSimpleWaiter()
 
