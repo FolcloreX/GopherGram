@@ -1,6 +1,6 @@
 # 🐹 GopherGram Uploader
 
-**GopherGram** é uma ferramenta de automação de alta performance escrita em **Go (Golang)**, projetada para fazer upload de cursos inteiros, séries ou grandes volumes de arquivos para o Telegram.
+**GopherGram** é uma ferramenta de automação de alta performance escrita em **Go (Golang)**, projetada para fazer upload de mídias inteiras, vídeos ou grandes volumes de arquivos para o Telegram.
 
 Ele atua como um **Userbot** (cliente MTProto), permitindo uploads de até **2GB (ou 4GB para Premium)**, gerenciamento de canais e formatação automática de conteúdo.
 
@@ -8,7 +8,7 @@ Ele atua como um **Userbot** (cliente MTProto), permitindo uploads de até **2GB
 
 ## ✨ Funcionalidades Principais
 
-- **🚀 Upload Resiliente:** Sistema de **Resume** automático. Se a internet cair ou o pc desligar, ele continua exatamente do arquivo onde parou (baseado no nome do curso).
+- **🚀 Upload Resiliente:** Sistema de **Resume** automático. Se a internet cair ou o pc desligar, ele continua exatamente do arquivo onde parou (baseado no nome da pasta).
 - **✂️ Split Inteligente:** Divide automaticamente vídeos e arquivos ZIP maiores que **2GB** (limite do Telegram) sem corromper o original.
 - **🎥 Streaming & Preview:** Gera thumbnails e metadados (duração/resolução) via **FFmpeg** para que os vídeos toquem nativamente no player do Telegram.
 - **🗂️ Organização Automática:**
