@@ -16,7 +16,7 @@ Ele atua como um **Userbot** (cliente MTProto), permitindo uploads de até **2GB
   - Envia vídeos na ordem correta dos módulos.
   - Gera um **Índice Navegável** (Menu) com hashtags (#F001, #F002...).
 - **🤖 Automação de Infraestrutura:**
-  - Se nenhum Chat ID for informado, **cria um canal novo** automaticamente com o nome do curso.
+  - Se nenhum Chat ID for informado, **cria um canal novo** automaticamente com o nome da mídia.
   - Atualiza a **Foto** e a **Descrição** do canal com estatísticas (Tamanho Total, Duração).
   - Gera link de convite.
 - **📢 Divulgação:** Posta um Card final formatado em um Grupo/Tópico de "Feed" configurável.
@@ -69,7 +69,7 @@ LOGO="Postado por @GopherGram"
 
 ## 🚀 Como Usar
 
-O comando básico exige o caminho da pasta do curso.
+O comando básico exige o caminho da pasta da mídia.
 
 ### 1. Upload Simples (Capa Texto)
 
@@ -128,7 +128,7 @@ Para garantir que a ordem dos vídeos fique correta (1, 2, 3...), numere suas pa
 O bot cria uma pasta `session/` na raiz.
 
 - **`session_+55...json`**: Guarda sua sessão de login (para não pedir código toda vez).
-- **`progress_Nome_Do_Curso.json`**: Guarda quais arquivos já foram enviados e qual o ID do canal criado.
+- **`progress_Nome_Da_Midia.json`**: Guarda quais arquivos já foram enviados e qual o ID do canal criado.
 
 **Para reiniciar um upload do zero:** Basta apagar o arquivo `.json` referente àquele curso dentro da pasta `session/`.
 
